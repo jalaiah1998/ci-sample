@@ -5,3 +5,5 @@ describe('Sample Test', () => {
     assert.equal(true, true);
   });
 });
+
+console.log('test cleared')
