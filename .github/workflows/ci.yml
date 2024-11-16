@@ -1,4 +1,4 @@
-name: Continuous Integration and Security
+name: Continuous Integration & Quality Assurance
 
 on: [pull_request, push]
 
@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
+    - name: Checkout repository
       uses: actions/checkout@v2
 
     - name: Set up Node.js
@@ -15,10 +15,7 @@ jobs:
       with:
         node-version: '14'
 
-    - name: Use Node.js Version from Package.json
-      run: npm ci
-
-    - name: Cache npm dependencies
+    - name: Cache Node.js dependencies
       uses: actions/cache@v2
       with:
         path: ~/.npm
@@ -26,42 +23,53 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-npm-
 
-    - name: Install Dependencies and Run Tests
-      run: npm install && npm test
+    - name: Install dependencies
+      run: npm ci
 
-    - name: Lint code with ESLint and fix errors
+    - name: Check for package.json format errors
       run: |
-        npm run lint -- --fix
+        npm fix --dry-run
         if [[ $? -ne 0 ]]; then
+          echo "package.json format errors exist. Run `npm fix` to apply changes."
           exit 1
         fi
 
-    - name: Run CodeQL Analysis
-      uses: github/codeql-action/analyze@v2
-      with:
-        languages: nodejs
-        queries: security, best-practices, performance
-
-    - name: Check for Security Vulnerabilities
+    - name: Run tests with coverage
       run: |
-        npx bandit -q
+        npm test --coverage
         if [[ $? -ne 0 ]]; then
+          echo "Test coverage threshold not met. Check the coverage report."
+          exit 1
+        fi
+      
+    - name: Lint code with ESLint
+      run: |
+        npm run lint --fix
+        if [[ $? -ne 0 ]]; then
+          echo "ESLint violations found. Fixing errors..."
           exit 1
         fi
 
-    - name: Format Code with Prettier
-      run: npm run format
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
-
-    - name: Deploy to Heroku
-      uses: heroku-cli/heroku-deploy@v4
+    - name: Analyze security vulnerabilities with SonarQube
+      uses: SonarSource/sonarqube-scanner-action@v2.3
       with:
-        app: your-heroku-app-name
-        api_key: ${{ secrets.HEROKU_API_KEY }}
+        server_url: 'https://your-sonarqube-server.com'
+        token: ${{ secrets.SONARQUBE_TOKEN }}
+        organization: 'your-organization'
+        additional_properties: |
+          sonar.javascript.lcov.reportPaths=coverage/lcov.info
+          sonar.javascript.eslint.reportPaths=coverage/eslint.xml
+
+    - name: Check for SmoothFlow compliance
+      run: |
+        npm run smoothflow
+        if [[ $? -ne 0 ]]; then
+          echo "SmoothFlow analysis failed. Check the report for errors."
+          exit 1
+        fi
+
+    - name: Deploy to GitHub Pages (Optional)
+      uses: actions/pages@v2
+      with:
+        destination: docs
+        source: docs
